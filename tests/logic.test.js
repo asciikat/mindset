@@ -4,7 +4,7 @@ import {
   DAY, rangeWindow, change, formatDelta, suggestTicker, cleanTicker, worryStats,
   lookBack, tagInsights, needsSupport, weeklyRecap, isValidData, moodLabel,
 } from '../js/logic.js';
-import { sampleData } from '../js/sample.js';
+import { sampleMind } from '../js/sample.js';
 
 const NOW = Date.UTC(2026, 9, 4, 12);
 const c = (daysAgo, mood, extra = {}) => ({ id: `c${daysAgo}-${mood}`, ts: NOW - daysAgo * DAY, mood, tags: [], worryId: null, ...extra });
@@ -91,10 +91,9 @@ test('moodLabel buckets', () => {
   assert.deepEqual([1, 3, 5, 7, 10].map(moodLabel), ['Rough', 'Low', 'Okay', 'Good', 'Great']);
 });
 
-test('sample data is valid, flagged as demo, and in range', () => {
-  const data = sampleData(NOW);
+test('sample mood data is valid and in range', () => {
+  const data = sampleMind(NOW);
   assert.equal(isValidData(data), true);
-  assert.equal(data.demo, true);
   assert.ok(data.checkins.length > 40);
   assert.ok(data.checkins.every((x) => x.mood >= 1 && x.mood <= 10 && Number.isInteger(x.mood) && x.ts <= NOW));
   assert.ok(data.checkins.every((x) => x.worryId == null || data.worries.some((w) => w.id === x.worryId)));

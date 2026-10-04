@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Mindset</title>
-<meta name="description" content="Log what's bothering you and watch your mood like a stock chart.">
+<meta name="description" content="Know your window, catch overload early, and plan the good days with your kid.">
 <meta name="theme-color" content="#fbfcfa" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#0d0f0d" media="(prefers-color-scheme: dark)">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -14,17 +14,24 @@
 <link rel="apple-touch-icon" href="icon.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Figtree:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Figtree:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;1,6..72,400&display=swap">
 <link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="css/today.css">
+<link rel="stylesheet" href="css/body.css">
+<link rel="stylesheet" href="css/kid.css">
+<link rel="stylesheet" href="css/meds.css">
+<link rel="stylesheet" href="css/learn.css">
 </head>
-<body class="trend-up">
+<body class="zone-calm">
 <div class="app">
   <main id="main" tabindex="-1"></main>
 </div>
 <nav class="tabbar" aria-label="Main">
-  <button type="button" class="tab" id="tab-home" data-view="home">Home</button>
-  <button type="button" class="checkin-btn" id="tab-checkin">Check in</button>
-  <button type="button" class="tab" id="tab-insights" data-view="insights">Insights</button>
+  <button type="button" class="tab" id="tab-today" data-view="today"><span class="tab-ico" aria-hidden="true">◐</span><span>Today</span></button>
+  <button type="button" class="tab" id="tab-kid" data-view="kid"><span class="tab-ico" aria-hidden="true">✿</span><span id="tab-kid-label">Kid</span></button>
+  <button type="button" class="overload-btn" id="tab-overload" aria-label="Overload: help me calm down now"><span>Overload</span></button>
+  <button type="button" class="tab" id="tab-meds" data-view="meds"><span class="tab-ico" aria-hidden="true">◷</span><span>Meds</span></button>
+  <button type="button" class="tab" id="tab-learn" data-view="learn"><span class="tab-ico" aria-hidden="true">✺</span><span>Learn</span></button>
 </nav>
 <div id="layer"></div>
 <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
