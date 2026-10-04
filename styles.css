@@ -397,3 +397,4 @@ input[type="range"] { width: 100%; accent-color: var(--ink); height: 32px; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+/* Pages config test */
