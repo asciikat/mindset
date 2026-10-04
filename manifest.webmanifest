@@ -1,0 +1,13 @@
+{
+  "name": "Mindset",
+  "short_name": "Mindset",
+  "description": "Log what's bothering you and watch your mood like a stock chart.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#fbfcfa",
+  "theme_color": "#fbfcfa",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
