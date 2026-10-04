@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {
   starterMeds, sampleMeds, doseToday, hoursSince, checksFor, schedule, nextDue, dayCurve, dayStats,
   caffeineFor, patterns, buildIcs, summaryText, cleanSettings, fmtClock, fmtHours, fmtAbout, fmtDay,
-  bandAverages, curveSentence, doseLabel,
+  bandAverages, curveSentence, doseLabel, caffeineGroups, groupEvents,
 } from '../js/logic/meds.js';
 
 const HOUR = 3600000;
@@ -197,6 +197,42 @@ test('caffeineFor keeps the dose day only', () => {
   assert.deepEqual(caffeineFor(d, caf).map((c) => c.id), ['a', 'c']);
 });
 
+test('caffeineGroups merges same drink in the same minute, in time order', () => {
+  const caf = [
+    { id: 'c', ts: at(4, 10, 5), what: 'coffee' },
+    { id: 'a', ts: at(4, 7, 55), what: 'caffeine' },
+    { id: 'b', ts: at(4, 7, 55), what: 'caffeine' },
+    { id: 'd', ts: at(4, 10, 5), what: 'tea' },
+    { id: 'e', ts: at(4, 12), what: null },
+  ];
+  assert.deepEqual(caffeineGroups(caf), [
+    { ts: at(4, 7, 55), what: 'caffeine', n: 2 },
+    { ts: at(4, 10, 5), what: 'coffee', n: 1 },
+    { ts: at(4, 10, 5), what: 'tea', n: 1 },
+    { ts: at(4, 12), what: 'caffeine', n: 1 },
+  ]);
+  assert.deepEqual(caffeineGroups(null), []);
+});
+
+test('groupEvents keeps caffeine and food in their own lanes and merges overlaps', () => {
+  const ev = [
+    { kind: 'cup', h: 0, label: 'a' }, { kind: 'cup', h: 0.1, label: 'b' }, { kind: 'plate', h: 0, label: 'eggs' },
+    { kind: 'cup', h: 1.2, label: 'c' }, { kind: 'cup', h: 3, label: 'd' }, { kind: 'plate', h: 3, label: 'lunch' },
+  ];
+  // 1 unit per hour, marks need 1 apart, merged marks 2 apart.
+  const out = groupEvents(ev, (x) => x, 1, 2);
+  const cups = out.filter((g) => g.kind === 'cup');
+  const plates = out.filter((g) => g.kind === 'plate');
+  assert.deepEqual(cups.map((g) => [g.h, g.n]), [[0, 3], [3, 1]], 'c at 1.2h falls inside the merged mark\'s wider berth');
+  assert.deepEqual(cups[0].labels, ['a', 'b', 'c']);
+  assert.deepEqual(plates.map((g) => [g.p, g.n, g.labels[0]]), [[0, 1, 'eggs'], [3, 1, 'lunch']]);
+  // Scaled positions: 10px per hour, 15px gap → 0h and 2h stay apart.
+  const px = groupEvents([{ kind: 'cup', h: 0 }, { kind: 'cup', h: 2 }], (x) => x * 10, 15);
+  assert.deepEqual(px.map((g) => g.p), [0, 20]);
+  assert.deepEqual(groupEvents([], (x) => x, 1), []);
+  assert.deepEqual(groupEvents([{ kind: 'cup', h: null }, null], (x) => x, 1), []);
+});
+
 test('bandAverages groups check-ins in 2-hour bands', () => {
   const d = dose('d', at(4, 7));
   const rows = bandAverages([d], [check('d', at(4, 8), { focus: 2 }), check('d', at(4, 9, 30), { focus: 4 }), check('d', at(4, 10), { focus: 5 })]);
@@ -344,4 +380,20 @@ test('summaryText keeps user text as-is (it is plain text, not HTML)', () => {
   assert.ok(txt.includes('a "quote"'));
   assert.ok(txt.includes(`${fmtClock(at(4, 9))} (1h in)`));
   assert.equal(MIN, 60000);
+});
+
+test('summaryText window counts calendar days across a daylight-saving change', () => {
+  const prev = process.env.TZ;
+  process.env.TZ = 'Australia/Sydney'; // clocks go forward on Sun 4 Oct 2026
+  try {
+    const now = new Date(2026, 9, 5, 10, 0).getTime();
+    const before = dose('before', new Date(2026, 8, 21, 23, 30).getTime()); // night before the 14-day window
+    const inside = dose('inside', new Date(2026, 8, 22, 7, 30).getTime());
+    const txt = summaryText([before, inside], [], [], SET, now, { days: 14 });
+    assert.match(txt, /\(1 day with a dose logged\)/);
+    assert.match(txt, /Period: Tue 22 Sep/);
+  } finally {
+    if (prev === undefined) delete process.env.TZ;
+    else process.env.TZ = prev;
+  }
 });

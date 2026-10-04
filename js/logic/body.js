@@ -182,6 +182,25 @@ export function buildState(draft, kind, ts, id) {
   };
 }
 
+// Make stored logs safe to draw: drops anything without a time or a known kind and fills
+// missing lists, so a hand-edited or partial backup can't break the Body screens.
+export function cleanStates(states) {
+  const list = (v) => (Array.isArray(v) ? v.filter((x) => typeof x === 'string' && x) : []);
+  return (Array.isArray(states) ? states : [])
+    .filter((s) => s && typeof s === 'object' && Number.isFinite(s.ts) && (s.kind === 'overload' || s.kind === 'calm'))
+    .map((s) => ({
+      ...s,
+      id: s.id != null ? String(s.id) : `b-${s.ts}`,
+      regions: list(s.regions),
+      sensations: list(s.sensations),
+      emotions: list(s.emotions),
+      triggers: list(s.triggers),
+      breathing: typeof s.breathing === 'string' && s.breathing ? s.breathing : null,
+      thoughts: typeof s.thoughts === 'string' ? s.thoughts : '',
+      intensity: Number.isInteger(s.intensity) && s.intensity >= 1 && s.intensity <= 10 ? s.intensity : null,
+    }));
+}
+
 // Split a stored thoughts string into lines.
 export function thoughtLines(thoughts) {
   return String(thoughts || '').split('\n').map((l) => l.trim()).filter(Boolean);

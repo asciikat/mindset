@@ -60,9 +60,11 @@
 }
 
 .today-summary {
-  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 2px 12px;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
   padding: 2px 0; color: var(--ink-2); font-weight: 600;
 }
+.today-summary > span { min-width: 0; }
+.today-summary .today-link { flex: none; }
 .today-link { min-height: 44px; padding: 4px 2px; }
 
 /* "Why 58?" */

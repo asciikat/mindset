@@ -5,20 +5,19 @@
 // Nothing here gives dose advice. Copy points to the prescriber for decisions.
 
 import {
-  CHART_HOURS, FOOD_AMOUNTS, FOOD_LABELS, CAFFEINE_KINDS, INTERVALS, TRACK_HOURS,
-  cleanSettings, doseLabel, doseToday, checksFor, schedule, nextDue, dayCurve, dayStats, caffeineFor,
+  FOOD_AMOUNTS, FOOD_LABELS, CAFFEINE_KINDS, INTERVALS, TRACK_HOURS,
+  cleanSettings, doseLabel, doseToday, checksFor, schedule, nextDue, dayCurve, dayStats, caffeineFor, caffeineGroups,
   patterns, buildIcs, summaryText, curveSentence, fmtClock, fmtDay, fmtHours, fmtAbout, hoursSince,
 } from '../logic/meds.js';
 import {
-  medChart, medTable, chartLegend, doseTrack, trackLegend, focusSpark, cupIcon, plateIcon, caffeineLabel,
+  medChart, medTable, chartLegend, doseTrack, trackLegend, focusSpark, cupIcon, drinkIcon, caffeineLabel,
 } from './medchart.js';
 import {
-  state, h, now, uid, fmt1, fmtDur, startOfDay, dayKey, commit, toast, go, back, render, setAccent,
+  state, h, now, uid, fmt1, fmtDur, startOfDay, dayKey, commit, toast, go, render, setAccent,
   openSheet, closeSheet, demoBanner, stat, backButton, scalePicker, registerView, registerAction,
 } from '../core.js';
 
 const MIN = 60000;
-const HOUR = 3600000;
 
 const meds = () => state.data.meds;
 const settings = () => cleanSettings(meds().settings);
@@ -51,6 +50,10 @@ function todaysMorning(t) {
 const hhmm = (ts) => { const d = new Date(ts); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
 const reduced = () => { try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch { return false; } };
 const sheetOpen = () => Boolean(document.querySelector('#layer .scrim'));
+// True while the person is typing in a field on the page (e.g. the settings card):
+// a background re-render would throw away what they've typed.
+const typing = () => { const a = document.activeElement; return Boolean(a && a.closest?.('#main') && a.matches?.('input, textarea, select')); };
+const busy = () => sheetOpen() || typing();
 
 // ---------- copying & downloading (both may be blocked in a preview) ----------
 async function copyText(text) {
@@ -121,7 +124,7 @@ function scheduleReminder() {
   if (!next) { state.ui.medRemind = null; return; }
   remindTimer = setTimeout(() => {
     notify('Mindset check-in', `${fmtHours(next.h)} since your ${dose.name || 'dose'}. How are focus, mood and appetite?`);
-    if (!sheetOpen() && ['meds', 'today'].includes(state.view)) render();
+    if (!busy() && ['meds', 'today'].includes(state.view)) render();
     scheduleReminder();
   }, Math.max(1000, next.ts - t));
 }
@@ -170,8 +173,9 @@ function startTicker() {
   ticker = setInterval(() => {
     const t = now();
     for (const el of document.querySelectorAll('[data-med-since]')) el.textContent = `${fmtDur(t - Number(el.dataset.medSince))} ago`;
+    for (const el of document.querySelectorAll('[data-med-until]')) el.textContent = ` · in ${fmtDur(Math.max(MIN, Number(el.dataset.medUntil) - t))}`;
     const sig = statusSig(t);
-    if (sig !== lastSig && !sheetOpen() && ['meds', 'today'].includes(state.view.split('/')[0])) render();
+    if (sig !== lastSig && !busy() && ['meds', 'today'].includes(state.view.split('/')[0])) render();
   }, 30000);
 }
 
@@ -198,10 +202,14 @@ function toggleSwitch(id, text, initial) {
 function openDoseSheet(existing = null) {
   const t = now();
   const st = settings();
-  const morning = existing ? null : todaysMorning(t);
+  // Example data is cleared when this saves, so don't carry example sleep or caffeine into a real dose.
+  const fresh = !existing && !state.data.demo;
+  const morning = fresh ? todaysMorning(t) : null;
   let amount = existing ? existing.foodAmount : null;
-  let cups = 0;
-  const alreadyCups = existing ? 0 : meds().caffeine.filter((c) => c.ts >= startOfDay(t) && c.ts <= t).length;
+  const alreadyCups = fresh ? meds().caffeine.filter((c) => c.ts >= startOfDay(t) && c.ts <= t).length : 0;
+  // The morning check-in may already have counted this morning's drinks; offer the ones not in the log yet.
+  const morningCups = !existing && typeof morning?.caffeine === 'number' ? Math.max(0, Math.min(9, morning.caffeine - alreadyCups)) : 0;
+  let cups = morningCups;
 
   const name = h('input', { type: 'text', id: 'med-name', maxlength: '40', value: existing?.name || st.name, autocomplete: 'off' });
   const mg = h('input', { type: 'number', id: 'med-mg', min: '0', max: '2000', step: 'any', inputmode: 'decimal', value: existing ? existing.mg ?? '' : st.mg ?? '', placeholder: 'Optional' });
@@ -213,7 +221,7 @@ function openDoseSheet(existing = null) {
   const note = h('textarea', { id: 'med-dose-note', maxlength: '300', placeholder: 'Anything worth remembering about this morning?' });
   note.value = existing?.note || '';
 
-  const cupsOut = h('output', { class: 'med-step-n', id: 'med-cups', 'aria-live': 'polite' }, '0');
+  const cupsOut = h('output', { class: 'med-step-n', id: 'med-cups', 'aria-live': 'polite' }, String(cups));
   const step = (dv) => { cups = Math.max(0, Math.min(9, cups + dv)); cupsOut.textContent = String(cups); };
 
   const save = () => {
@@ -287,7 +295,10 @@ function openDoseSheet(existing = null) {
         h('button', { class: 'icon-btn med-step-btn', type: 'button', 'aria-label': 'One less', onclick: () => step(-1) }, '−'),
         cupsOut,
         h('button', { class: 'icon-btn med-step-btn', type: 'button', 'aria-label': 'One more', onclick: () => step(1) }, '+')),
-      h('span', { class: 'fine', text: alreadyCups ? `Coffee, tea, energy drinks, cola. You’ve already logged ${alreadyCups} today; count only new ones.` : 'Coffee, tea, energy drinks, cola. Each one goes in today’s caffeine log.' })),
+      h('span', { class: 'fine', text: [
+        alreadyCups ? `Coffee, tea, energy drinks, cola. You’ve already logged ${alreadyCups} today; count only new ones.` : 'Coffee, tea, energy drinks, cola. Each one goes in today’s caffeine log.',
+        morningCups ? 'Filled in from your morning check-in.' : '',
+      ].filter(Boolean).join(' ') })),
     h('label', { class: 'field', for: 'med-dose-note' }, h('span', { class: 'lbl', text: 'Note (optional)' }), note),
     !existing && state.data.demo ? h('p', { class: 'fine', text: 'Saving clears the example data and starts your own log.' }) : null,
     h('button', { class: 'btn block', type: 'submit' }, existing ? 'Save changes' : 'Log dose'),
@@ -372,28 +383,51 @@ function openCheckSheet() {
 }
 
 function openCaffeineSheet() {
-  const t = now();
-  const today = meds().caffeine.filter((c) => c.ts >= startOfDay(t) && c.ts <= t).length;
+  const todays = () => {
+    const t = now();
+    return meds().caffeine.filter((c) => c.ts >= startOfDay(t) && c.ts <= t).sort((a, b) => b.ts - a.ts);
+  };
   const log = (what) => {
     const wasDemo = state.data.demo;
     closeSheet();
     commit((d) => d.meds.caffeine.push({ id: uid(), ts: now(), what }), { quiet: true });
-    const n = meds().caffeine.filter((c) => c.ts >= startOfDay(now())).length;
-    toast(`${caffeineLabel(what)} logged · ${n} today${wasDemo ? '. Examples cleared.' : ''}`);
+    toast(`${caffeineLabel(what)} logged · ${todays().length} today${wasDemo ? '. Examples cleared.' : ''}`);
   };
+  const count = h('p', { class: 'fine', 'aria-live': 'polite' });
+  const list = h('ul', { class: 'list med-caf-list', 'aria-label': 'Caffeine logged today' });
+  const drawList = () => {
+    const items = todays();
+    count.textContent = items.length ? `${items.length} logged today so far. Tap what you’re having now.` : 'Tap what you’re having now.';
+    list.hidden = !items.length;
+    list.replaceChildren(...items.map((c) => h('li', { class: 'med-caf-row' },
+      h('span', { class: 'med-caf-ico', 'aria-hidden': 'true' }, drinkIcon(c.what, { size: 16 })),
+      h('span', { class: 'med-caf-what', text: caffeineLabel(c.what) }),
+      h('span', { class: 'med-caf-when', text: fmtClock(c.ts) }),
+      h('button', { class: 'text-btn med-caf-x', type: 'button', 'aria-label': `Remove ${caffeineLabel(c.what).toLowerCase()} at ${fmtClock(c.ts)}`, onclick: () => {
+        commit((d) => { d.meds.caffeine = d.meds.caffeine.filter((x) => x.id !== c.id); }, { keepDemo: true });
+        drawList();
+        toast('Removed');
+        // Keep focus inside the sheet: the next Remove button, or the first drink.
+        (list.querySelector('button') || grid.querySelector('button'))?.focus();
+      } }, 'Remove'))));
+  };
+  const grid = h('div', { class: 'med-caf-grid' },
+    CAFFEINE_KINDS.map((k, i) => h('button', { class: 'choice med-caf', type: 'button', 'data-autofocus': i === 0 ? '' : null, onclick: () => log(k) },
+      h('span', { class: 'med-caf-ico', 'aria-hidden': 'true' }, drinkIcon(k)), caffeineLabel(k))));
+  drawList();
   openSheet('Caffeine', h('div', { class: 'med-form' },
-    h('p', { class: 'fine', text: today ? `${today} logged today so far. Tap what you’re having now.` : 'Tap what you’re having now.' }),
-    h('div', { class: 'med-caf-grid' },
-      CAFFEINE_KINDS.map((k, i) => h('button', { class: 'choice med-caf', type: 'button', 'data-autofocus': i === 0 ? '' : null, onclick: () => log(k) }, h('span', { class: 'med-caf-ico', 'aria-hidden': 'true' }, cupIcon({ size: 18 })), caffeineLabel(k)))),
-    state.data.demo ? h('p', { class: 'fine', text: 'Logging this clears the example data.' }) : null,
-    h('p', { class: 'fine', text: 'Caffeine on top of a stimulant can make some people jittery or anxious. Logging it helps you see if that’s you.' })));
+    count,
+    grid,
+    state.data.demo ? h('p', { class: 'fine', text: 'Logging a drink clears the example data.' }) : null,
+    h('p', { class: 'fine', text: 'Caffeine on top of a stimulant can make some people jittery or anxious. Logging it helps you see if that’s you.' }),
+    list));
 }
 
 // ---------- pieces of the main view ----------
 function dueBlock(dose, due, { compact = false } = {}) {
   if (!due) {
     return h('div', { class: 'med-due done', role: 'status' },
-      h('span', { class: 'med-due-text' }, h('strong', { text: 'Check-ins done for today.' }), compact ? null : h('span', { text: ` The ${settings().hours}h tracking window has passed.` })),
+      h('span', { class: 'med-due-text' }, h('strong', { text: 'No more check-ins today.' }), h('span', { text: compact ? ` ${daySoFar(dose)}` : ` The ${settings().hours}h tracking window has passed.` })),
       compact ? null : h('button', { class: 'text-btn', type: 'button', onclick: openCheckSheet }, 'Add one anyway'));
   }
   const when = fmtClock(due.dueTs);
@@ -405,8 +439,15 @@ function dueBlock(dose, due, { compact = false } = {}) {
   }
   const mins = Math.max(1, Math.round((due.dueTs - now()) / MIN));
   return h('div', { class: 'med-due', role: 'status' },
-    h('span', { class: 'med-due-text' }, h('strong', { text: `Next check-in ${when}` }), h('span', { text: ` · in ${fmtDur(mins * MIN)}` })),
+    h('span', { class: 'med-due-text' }, h('strong', { text: `Next check-in ${when}` }), h('span', { 'data-med-until': String(due.dueTs), text: ` · in ${fmtDur(mins * MIN)}` })),
     h('button', { class: `btn ghost med-due-btn`, type: 'button', onclick: openCheckSheet }, compact ? 'Check in' : 'Check in now'));
+}
+
+// "8 check-ins · focus 3.4 on average, peak 4" (or a gentle note when there were none).
+function daySoFar(dose) {
+  const st = dayStats(dose, meds().checks);
+  if (!st.count) return 'None were logged.';
+  return `${st.count} check-in${st.count === 1 ? '' : 's'} · focus ${fmt1(st.avgFocus)} on average${st.peakFocus ? `, peak ${st.peakFocus.value}` : ''}.`;
 }
 
 function trackLabel(dose, slots, t) {
@@ -443,12 +484,20 @@ function heroNoDose(t) {
       h('span', { class: 'med-take-main', text: 'I took my meds' }),
       h('span', { class: 'med-take-sub', text: 'Logs the time, food, sleep and caffeine' })),
     h('p', { class: 'fine' }, last
-      ? `Last logged ${dayKey(last.ts) === dayKey(t - 86400000) ? 'yesterday' : fmtDay(last.ts)} at ${fmtClock(last.ts)}.`
+      ? `Last logged ${dayKey(last.ts) === dayKey(startOfDay(t) - 1) ? 'yesterday' : fmtDay(last.ts)} at ${fmtClock(last.ts)}.`
       : 'Then Mindset asks a few quick questions every hour, and draws your day.'));
+}
+
+// "Caffeine at 7:55am and 10:05am. Food at 7:55am." for the chart's text alternative.
+function eventsSentence(dose, events) {
+  const at = (kind) => events.filter((e) => e.kind === kind).sort((a, b) => a.h - b.h).map((e) => fmtClock(dose.ts + e.h * 3600000));
+  const say = (label, times) => (times.length ? `${label} at ${times.length > 1 ? `${times.slice(0, -1).join(', ')} and ${times[times.length - 1]}` : times[0]}.` : '');
+  return [say('Caffeine', at('cup')), say('Food', at('plate'))].filter(Boolean).join(' ');
 }
 
 function chartSection(dose, t, { title = 'Today’s curve', isToday = true } = {}) {
   const points = dayCurve(dose, meds().checks);
+  const events = dayEvents(dose);
   const showTable = Boolean(state.ui.medTable);
   const tableId = `med-table-${dose.id}`;
   return h('section', { class: 'section med-chart-sec', 'aria-labelledby': 'med-chart-h' },
@@ -459,10 +508,10 @@ function chartSection(dose, t, { title = 'Today’s curve', isToday = true } = {
     points.length || isToday
       ? medChart({
         points,
-        events: dayEvents(dose),
+        events,
         nowH: isToday ? hoursSince(dose, t) : null,
         startTs: dose.ts,
-        label: `Chart of focus, mood and anxiety by hours since the dose. ${curveSentence(points)}${points.length ? ' Use the left and right arrow keys to read each check-in.' : ''}`,
+        label: `Chart of focus, mood and anxiety by hours since the dose. ${curveSentence(points)} ${eventsSentence(dose, events)}${points.length ? ' Use the left and right arrow keys to read each check-in.' : ''}`,
       })
       : null,
     points.length
@@ -652,11 +701,16 @@ function dayView(id) {
   const cups = caffeineFor(dose, meds().caffeine);
   const isToday = dayKey(dose.ts) === dayKey(t);
   return [
-    h('header', { class: 'topbar' }, backButton('Meds'), h('button', { class: 'text-btn', type: 'button', onclick: () => openDoseSheet(doseById(id)) }, 'Edit')),
+    h('header', { class: 'topbar' }, backButton('Meds'), h('button', { class: 'text-btn med-edit', type: 'button', onclick: () => openDoseSheet(doseById(id)) }, 'Edit')),
     h('section', { class: 'med-day-head' },
       h('span', { class: 'eyebrow', text: `${doseLabel(dose)} · ${fmtDay(dose.ts)}` }),
       h('h1', { class: 'page-title', text: `Taken ${fmtClock(dose.ts)}` }),
-      h('p', { class: 'page-sub', text: `${foodText(dose)} · ${dose.sleepHours != null ? `slept ${dose.sleepHours}h` : 'sleep not logged'} · ${cups.length} caffeine${cups.length ? ` (${cups.map((c) => caffeineLabel(c.what).toLowerCase()).join(', ')})` : ''}` })),
+      h('p', { class: 'page-sub', text: `${foodText(dose)} · ${dose.sleepHours != null ? `slept ${dose.sleepHours}h` : 'sleep not logged'}` }),
+      h('p', { class: 'med-caf-line' },
+        h('span', { class: 'med-caf-ico', 'aria-hidden': 'true' }, cupIcon({ size: 14 })),
+        cups.length
+          ? `Caffeine ×${cups.length}: ${caffeineGroups(cups).map((g) => `${fmtClock(g.ts)} ${g.what === 'caffeine' ? 'drink' : caffeineLabel(g.what).toLowerCase()}${g.n > 1 ? ` ×${g.n}` : ''}`).join(' · ')}`
+          : 'No caffeine logged')),
     h('div', { class: 'stats' },
       stat(st.avgFocus == null ? '–' : fmt1(st.avgFocus), 'avg focus'),
       stat(st.peakFocus ? `${st.peakFocus.value}` : '–', st.peakFocus ? `peak, ~${fmtAbout(st.peakFocus.h)}` : 'peak'),
@@ -689,7 +743,7 @@ export function medsCard() {
   const st = settings();
   const slots = schedule(dose, meds().checks, t, st);
   const due = nextDue(dose, meds().checks, t, st);
-  return h('section', { class: 'card med-card', 'aria-labelledby': 'medcard-h' },
+  return h('section', { class: 'card med-card zone-calm', 'aria-labelledby': 'medcard-h' },
     h('div', { class: 'section-head' },
       h('span', { class: 'eyebrow', id: 'medcard-h', text: 'Meds' }),
       h('button', { class: 'text-btn', type: 'button', onclick: () => go('meds') }, 'Open')),

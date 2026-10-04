@@ -5,9 +5,10 @@
 // each with its own marker shape so identity never rests on colour alone; a legend
 // is always shown and each line is labelled at its end; a crosshair snaps to the
 // nearest check-in and the tooltip lists every series; arrow keys do the same.
+// Text is always ink, never a series colour.
 
 import { h, s, afterRender } from '../core.js';
-import { CHART_HOURS, fmtClock, fmtHours } from '../logic/meds.js';
+import { CHART_HOURS, fmtClock, fmtHours, groupEvents } from '../logic/meds.js';
 
 const HOUR = 3600000;
 
@@ -36,7 +37,7 @@ export function markShape(shape, cx, cy, r, cls) {
   return s('circle', { cx: cx.toFixed(1), cy: cy.toFixed(1), r, class: cls });
 }
 
-// A line key with the series' marker, for legends.
+// A line key with the series' marker, for legends and the tooltip.
 export function seriesKey(sr) {
   return s('svg', { viewBox: '0 0 22 12', width: 22, height: 12, 'aria-hidden': 'true', class: 'med-key-svg' },
     s('line', { x1: 1, x2: 21, y1: 6, y2: 6, class: `med-line ${sr.cls}` }),
@@ -56,6 +57,33 @@ export function plateIcon({ size = 14, x = null, y = null } = {}) {
     s('circle', { cx: 8, cy: 8, r: 2.8, fill: 'currentColor' }));
 }
 
+// One glyph per drink for the caffeine buttons (the chart uses the plain cup).
+export function drinkIcon(what, { size = 18 } = {}) {
+  const svg = (...kids) => s('svg', { viewBox: '0 0 16 16', width: size, height: size, 'aria-hidden': 'true', class: 'med-ico' }, ...kids);
+  const line = (d, w = 1.4) => s('path', { d, fill: 'none', stroke: 'currentColor', 'stroke-width': String(w), 'stroke-linecap': 'round', 'stroke-linejoin': 'round' });
+  if (what === 'tea') {
+    // A low cup with a tea-bag string and tag.
+    return svg(
+      s('path', { d: 'M2 7.5h10v1.5a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4z', fill: 'currentColor' }),
+      line('M12 8.4h.7a1.6 1.6 0 0 1 0 3.2H11.6'),
+      line('M7 7.5V3.2l2.6-1', 1.1),
+      s('rect', { x: 9.1, y: 0.9, width: 2.6, height: 2.6, rx: 0.5, fill: 'currentColor' }));
+  }
+  if (what === 'energy drink') {
+    // A tall can.
+    return svg(
+      s('path', { d: 'M4.6 2.6h6.8l.6 1.4v9.6l-.6 1.1H4.6L4 13.6V4z', fill: 'currentColor' }),
+      s('path', { d: 'M6.2 6.2l2.6-.9-1 2.4 2.1-.4-3 3.3.8-2.4-1.9.3z', class: 'med-ico-cut' }));
+  }
+  if (what === 'cola') {
+    // A glass with a straw.
+    return svg(
+      s('path', { d: 'M3.6 5.2h8.8l-1 9.1H4.6z', fill: 'currentColor' }),
+      line('M9.3 7.6l2.3-6.4h2', 1.3));
+  }
+  return cupIcon({ size });
+}
+
 export function chartLegend({ events = true } = {}) {
   return h('div', { class: 'med-legend' },
     SERIES.map((sr) => h('span', { class: 'med-key' }, seriesKey(sr), sr.label)),
@@ -67,7 +95,7 @@ export function chartLegend({ events = true } = {}) {
 // points: dayCurve() output. events: [{ kind: 'cup'|'plate', h, label }].
 // nowH: hours since the dose right now (today only) — draws "now" and washes the future.
 export function medChart({ points, events = [], nowH = null, startTs = null, label = 'Focus, mood and anxiety by hours since the dose' }) {
-  const H = 250;
+  const H = 262;
   const wrap = h('div', { class: 'med-chart', style: `min-height:${H}px` });
   const tip = h('div', { class: 'med-tip', hidden: true });
   const live = h('div', { class: 'visually-hidden', 'aria-live': 'polite' });
@@ -76,18 +104,35 @@ export function medChart({ points, events = [], nowH = null, startTs = null, lab
   return wrap;
 }
 
+const LABEL_CH = 6.4; // approx. width of one end-label character (11px semibold), for layout before measuring
+const LANE = { cup: 7, plate: 23 }; // icon tops below the baseline: caffeine lane, then food lane
+
 function draw(host, o) {
   host.querySelector('svg.med-svg')?.remove();
   const { points, events, nowH, startTs, H, tip, live } = o;
   const W = Math.max(280, Math.round(host.clientWidth || 340));
-  const padL = 22, padR = 74, padT = 22;
-  const plotH = H - padT - 66;
+  const padL = 22, padT = 22, padB = 76;
+  const plotH = H - padT - padB;
+
+  // End labels ("Focus 4") sit just right of each line's last point. Give the plot
+  // only as much right-hand room as those labels need, so the hours get the width.
+  const ends = [];
+  for (const sr of SERIES) {
+    const last = [...points].reverse().find((p) => p[sr.key] != null);
+    if (last) ends.push({ sr, p: last, text: `${sr.label} ${last[sr.key]}` });
+  }
+  const labelW = Math.max(0, ...ends.map((e) => e.text.length * LABEL_CH));
+  const r = ends.length ? Math.min(Math.max(...ends.map((e) => e.p.h)), CHART_HOURS) / CHART_HOURS : 0;
+  let padR = 16;
+  if (r > 0) padR = Math.max(padR, Math.ceil(W - padL - (W - padL - 14 - labelW - 4) / r));
+  padR = Math.min(padR, 84);
   const plotW = W - padL - padR;
   const X = (hr) => padL + (Math.min(Math.max(hr, 0), CHART_HOURS) / CHART_HOURS) * plotW;
   const Y = (v) => padT + ((5 - v) / 4) * plotH;
   const base = Y(1);
 
   const svg = s('svg', { class: 'med-svg', viewBox: `0 0 ${W} ${H}`, width: W, height: H, role: 'img', tabindex: points.length ? '0' : null, 'aria-label': o.label });
+  host.insertBefore(svg, host.firstChild);
 
   // Still to come (today): a quiet wash right of "now".
   if (nowH != null && nowH < CHART_HOURS) {
@@ -101,71 +146,68 @@ function draw(host, o) {
   }
 
   // X axis: hours since the dose, with the clock time underneath.
-  const clockEvery = plotW / (CHART_HOURS / 2) < 42 ? 4 : 2;
+  // Clock labels ("11:40am", 10px mono, about 6px a character) every 2h when they fit, else every 4h.
+  const clockEvery = plotW / (CHART_HOURS / 2) < 56 ? 4 : 2;
   for (let hr = 0; hr <= CHART_HOURS; hr += 2) {
     const x = X(hr);
     svg.append(s('line', { x1: x, x2: x, y1: base, y2: base + 4, class: 'med-axis' }));
-    svg.append(s('text', { x, y: H - 20, 'text-anchor': 'middle', class: 'med-tick med-tick-h', text: `${hr}h` }));
+    svg.append(s('text', { x, y: base + 52, 'text-anchor': 'middle', class: 'med-tick med-tick-h', text: `${hr}h` }));
     if (startTs != null && hr % clockEvery === 0) {
-      svg.append(s('text', { x, y: H - 6, 'text-anchor': 'middle', class: 'med-tick', text: fmtClock(startTs + hr * HOUR) }));
+      const text = fmtClock(startTs + hr * HOUR);
+      const half = text.length * 3.1;
+      svg.append(s('text', { x: Math.min(Math.max(x, half), W - half).toFixed(1), y: base + 66, 'text-anchor': 'middle', class: 'med-tick', text }));
     }
   }
 
-  // Caffeine and food along the bottom, nudged so icons never sit on top of each other.
-  let lastX = -Infinity;
-  for (const ev of [...events].sort((a, b) => a.h - b.h)) {
-    let x = X(ev.h);
-    if (x - lastX < 14) x = lastX + 14;
-    lastX = x;
-    const icon = ev.kind === 'cup' ? cupIcon({ size: 13, x: x - 6.5, y: base + 9 }) : plateIcon({ size: 13, x: x - 6.5, y: base + 9 });
-    svg.append(s('g', { class: 'med-ev-mark' }, icon));
+  // Caffeine and food in two lanes under the axis, each at its real time; marks
+  // too close to draw apart merge into one with a count.
+  for (const g of groupEvents(events, X, 15)) {
+    const y = base + LANE[g.kind];
+    const icon = (g.kind === 'cup' ? cupIcon : plateIcon)({ size: 13, x: (g.p - 6.5).toFixed(1), y });
+    svg.append(s('g', { class: 'med-ev-mark' }, icon,
+      g.n > 1 ? s('text', { x: (g.p + 8).toFixed(1), y: y + 10, class: 'med-ev-count', text: `×${g.n}` }) : null));
   }
 
   // Now.
   if (nowH != null && nowH <= CHART_HOURS) {
     const x = X(nowH);
-    svg.append(s('line', { x1: x, x2: x, y1: padT - 8, y2: base + 6, class: 'med-now-line' }));
+    svg.append(s('line', { x1: x, x2: x, y1: padT - 8, y2: base + 4, class: 'med-now-line' }));
     svg.append(s('text', { x: Math.min(Math.max(x, padL + 12), W - 14), y: padT - 11, 'text-anchor': 'middle', class: 'med-tick med-now-text', text: 'now' }));
   }
 
   // Series: 2px lines broken where a score was skipped, ≥8px markers with a surface ring.
-  const ends = [];
-  const lines = [];
+  const marks = [];
   for (const sr of SERIES) {
-    const pts = points.filter((p) => p[sr.key] != null);
     let d = '';
-    let prev = null;
+    let joined = false;
     for (const p of points) {
       const v = p[sr.key];
-      if (v == null) { prev = null; continue; }
-      d += `${prev ? 'L' : 'M'}${X(p.h).toFixed(1)},${(Y(v) + sr.dodge).toFixed(1)}`;
-      prev = p;
+      if (v == null) { joined = false; continue; }
+      d += `${joined ? 'L' : 'M'}${X(p.h).toFixed(1)},${(Y(v) + sr.dodge).toFixed(1)}`;
+      joined = true;
+      marks.push([sr, p]);
     }
     if (d.includes('L')) svg.append(s('path', { d, class: `med-line ${sr.cls}` }));
-    lines.push(...pts.map((p) => [sr, p]));
-    if (pts.length) {
-      const last = pts[pts.length - 1];
-      ends.push({ sr, x: X(last.h), y: Y(last[sr.key]) + sr.dodge, text: `${sr.label} ${last[sr.key]}` });
-    }
   }
-
   // Markers after every line, so a ringed marker always sits on top of the other lines.
-  for (const [sr, p] of lines) svg.append(markShape(sr.shape, X(p.h), Y(p[sr.key]) + sr.dodge, 4.5, `med-mark ${sr.cls}`));
+  for (const [sr, p] of marks) svg.append(markShape(sr.shape, X(p.h), Y(p[sr.key]) + sr.dodge, 4.5, `med-mark ${sr.cls}`));
 
-  // Direct end labels in ink, spaced so they never overlap; a leader line joins any label moved off its point.
+  // Direct end labels in ink, spaced so they never overlap; a leader joins any label moved off its point.
   const GAP = 15;
+  for (const e of ends) { e.x = X(e.p.h); e.y = Y(e.p[e.sr.key]) + e.sr.dodge; }
   ends.sort((a, b) => a.y - b.y);
-  for (let i = 0; i < ends.length; i++) {
-    ends[i].ly = Math.max(ends[i].y, i ? ends[i - 1].ly + GAP : padT - 4);
-  }
+  for (let i = 0; i < ends.length; i++) ends[i].ly = Math.max(ends[i].y, i ? ends[i - 1].ly + GAP : padT - 4);
   const overflow = ends.length ? ends[ends.length - 1].ly - (base + 4) : 0;
   if (overflow > 0) for (const e of ends) e.ly -= overflow;
   for (let i = ends.length - 2; i >= 0; i--) ends[i].ly = Math.min(ends[i].ly, ends[i + 1].ly - GAP);
   for (const e of ends) {
-    const clearNow = nowH != null && nowH <= CHART_HOURS && X(nowH) >= e.x - 1 && X(nowH) < e.x + 14 ? X(nowH) + 6 : 0;
-    const lx = Math.min(Math.max(e.x + 12, clearNow), W - 66);
-    if (Math.abs(e.ly - e.y) > 2 || lx < e.x + 8) svg.append(s('path', { d: `M${(e.x + 6).toFixed(1)},${e.y.toFixed(1)}L${(lx - 3).toFixed(1)},${e.ly.toFixed(1)}`, class: 'med-leader' }));
-    svg.append(s('text', { x: lx, y: e.ly + 4, class: 'med-end-label', text: e.text }));
+    const t = s('text', { x: 0, y: e.ly + 4, class: 'med-end-label', text: e.text });
+    svg.append(t);
+    let w = e.text.length * LABEL_CH;
+    try { w = t.getComputedTextLength() || w; } catch { /* not measurable here */ }
+    const lx = Math.max(e.x + 10, Math.min(e.x + 12, W - w - 2));
+    t.setAttribute('x', lx.toFixed(1));
+    if (Math.abs(e.ly - e.y) > 2) svg.insertBefore(s('path', { d: `M${(e.x + 6).toFixed(1)},${e.y.toFixed(1)}L${(lx - 3).toFixed(1)},${e.ly.toFixed(1)}`, class: 'med-leader' }), t);
   }
 
   // Crosshair + highlighted markers, drawn on top.
@@ -175,7 +217,6 @@ function draw(host, o) {
   cross.append(hair, hiMarks);
   svg.append(cross);
 
-  host.insertBefore(svg, host.firstChild);
   if (!points.length) return;
 
   const xs = points.map((p) => X(p.h));
@@ -193,24 +234,34 @@ function draw(host, o) {
     hair.setAttribute('x2', x);
     hiMarks.replaceChildren(...SERIES.filter((sr) => p[sr.key] != null).map((sr) => markShape(sr.shape, x, Y(p[sr.key]) + sr.dodge, 6, `med-mark ${sr.cls} hi`)));
     cross.setAttribute('visibility', 'visible');
+    // Caffeine logged since the check-in before this one (or since the dose).
+    const fromH = i ? points[i - 1].h : -Infinity;
+    const cups = events.filter((ev) => ev.kind === 'cup' && ev.h > fromH && ev.h <= p.h).map((ev) => ev.label.toLowerCase());
     const extra = [p.appetite != null ? `Appetite ${p.appetite}` : null, p.energy != null ? `Energy ${p.energy}` : null].filter(Boolean).join(' · ');
-    tip.replaceChildren(
+    const lines = [
       h('div', { class: 'med-tip-when' }, `${fmtHours(p.h)} after · ${fmtClock(p.ts)}`),
-      SERIES.map((sr) => h('div', { class: 'med-tip-row' },
-        h('span', { class: `med-tip-key ${sr.cls}`, 'aria-hidden': 'true' }),
-        h('strong', { text: p[sr.key] == null ? '–' : String(p[sr.key]) }),
-        h('span', { text: sr.label }))),
+      ...SERIES.map((sr) => h('div', { class: 'med-tip-row' },
+        seriesKey(sr),
+        h('span', { text: sr.label }),
+        h('strong', { text: p[sr.key] == null ? '–' : String(p[sr.key]) }))),
       extra ? h('div', { class: 'med-tip-extra', text: extra }) : null,
       p.ate ? h('div', { class: 'med-tip-extra', text: `Ate${p.ateWhat ? `: ${p.ateWhat}` : ' something'}` }) : null,
-      p.note ? h('div', { class: 'med-tip-note', text: `“${p.note}”` }) : null);
+      cups.length ? h('div', { class: 'med-tip-extra', text: `Caffeine: ${cups.join(', ')}` }) : null,
+      p.note ? h('div', { class: 'med-tip-note', text: `“${p.note}”` }) : null,
+    ];
+    tip.replaceChildren(...lines.filter(Boolean));
     tip.hidden = false;
+    // Sit beside the crosshair on whichever side has more room, at the top of the plot.
     const tw = tip.offsetWidth;
-    let left = x + 14;
-    if (left + tw > W) left = x - 14 - tw;
-    tip.style.left = `${Math.max(0, left)}px`;
-    tip.style.top = `${padT - 4}px`;
+    const scale = (svg.getBoundingClientRect().width || W) / W;
+    const px = x * scale;
+    const hostW = host.clientWidth || W;
+    let left = px + 12;
+    if (left + tw > hostW && px - 12 - tw >= 0) left = px - 12 - tw;
+    tip.style.left = `${Math.max(0, Math.min(left, hostW - tw))}px`;
+    tip.style.top = `${Math.round((padT - 6) * scale)}px`;
     if (announce) {
-      live.textContent = `${fmtHours(p.h)} after the dose, ${fmtClock(p.ts)}. ${SERIES.map((sr) => `${sr.label} ${p[sr.key] ?? 'not rated'}`).join(', ')}.${extra ? ` ${extra}.` : ''}${p.note ? ` Note: ${p.note}` : ''}`;
+      live.textContent = `${fmtHours(p.h)} after the dose, ${fmtClock(p.ts)}. ${SERIES.map((sr) => `${sr.label} ${p[sr.key] ?? 'not rated'}`).join(', ')}.${extra ? ` ${extra}.` : ''}${p.ate ? ` Ate${p.ateWhat ? `: ${p.ateWhat}` : ' something'}.` : ''}${cups.length ? ` Caffeine: ${cups.join(', ')}.` : ''}${p.note ? ` Note: ${p.note}` : ''}`;
     }
   };
   const nearest = (e) => {
@@ -260,28 +311,27 @@ export function medTable(points, caption = 'Check-ins') {
 }
 
 // ---------- dose timeline track ----------
-// A 0–14h rail: check-in slots (done / missed / due / later), "now", caffeine and food.
+// A 0–14h rail: check-in slots (done / missed / due / later), "now", and lanes for
+// caffeine and food under it.
 export function doseTrack({ dose, slots, nowH = null, events = [], compact = false, label = '' }) {
-  const pct = (hr) => `${((Math.min(Math.max(hr, 0), CHART_HOURS) / CHART_HOURS) * 100).toFixed(2)}%`;
-  let lastPct = -Infinity;
-  const evs = [...events].sort((a, b) => a.h - b.h).map((ev) => {
-    let p = (Math.min(Math.max(ev.h, 0), CHART_HOURS) / CHART_HOURS) * 100;
-    if (p - lastPct < 4.5) p = lastPct + 4.5;
-    lastPct = p;
-    return h('span', { class: `med-ev ${ev.kind}`, style: `left:${p.toFixed(2)}%` }, ev.kind === 'cup' ? cupIcon({ size: 13 }) : plateIcon({ size: 13 }));
-  });
+  const frac = (hr) => (Math.min(Math.max(hr, 0), CHART_HOURS) / CHART_HOURS) * 100;
+  const pct = (hr) => `${frac(hr).toFixed(2)}%`;
+  const evs = compact ? [] : groupEvents(events, frac, 4.5, 8).map((g) => h('span', { class: `med-ev ${g.kind}`, style: `left:${g.p.toFixed(2)}%` },
+    g.kind === 'cup' ? cupIcon({ size: 13 }) : plateIcon({ size: 13 }),
+    g.n > 1 ? h('span', { class: 'med-ev-n', text: `×${g.n}` }) : null));
   const inner = h('div', { class: 'med-track-inner' },
     h('span', { class: 'med-rail' }),
     nowH != null ? h('span', { class: 'med-rail-fill', style: `width:${pct(nowH)}` }) : null,
     h('span', { class: 'med-dose-pin', style: 'left:0%' }),
     slots.map((sl) => h('span', { class: `med-slot ${sl.status}`, style: `left:${pct(sl.h)}` })),
     nowH != null && nowH <= CHART_HOURS ? h('span', { class: 'med-now-pin', style: `left:${pct(nowH)}` }, compact ? null : h('span', { class: 'med-now-lbl', text: 'now' })) : null,
-    compact ? null : evs);
+    evs);
   const axis = h('div', { class: 'med-track-axis', 'aria-hidden': 'true' },
     h('span', { text: compact ? fmtClock(dose.ts) : `0h · ${fmtClock(dose.ts)}` }),
     h('span', { text: compact ? fmtClock(dose.ts + 7 * HOUR) : `7h · ${fmtClock(dose.ts + 7 * HOUR)}` }),
     h('span', { text: compact ? fmtClock(dose.ts + CHART_HOURS * HOUR) : `14h · ${fmtClock(dose.ts + CHART_HOURS * HOUR)}` }));
-  return h('div', { class: `med-track${compact ? ' compact' : ''}`, role: 'img', 'aria-label': label }, inner, axis);
+  const hasEvents = evs.length > 0;
+  return h('div', { class: `med-track${compact ? ' compact' : ''}${hasEvents ? ' has-ev' : ''}`, role: 'img', 'aria-label': label }, inner, axis);
 }
 
 export function trackLegend() {

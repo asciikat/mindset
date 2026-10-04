@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {
   REGIONS, SENSATIONS, SENSATIONS_HARD, SENSATIONS_CALM, EMOTIONS_HARD, EMOTIONS_CALM, BREATHING,
   THOUGHT_CHIPS_HARD, THOUGHT_CHIPS_CALM, TRIGGERS,
-  starterBody, sampleBody, buildState, thoughtLines, thoughtKey, signature, ranked, earlySigns, recentCounts,
+  starterBody, sampleBody, buildState, thoughtLines, thoughtKey, signature, ranked, earlySigns, recentCounts, cleanStates,
   regionLabel, breathingLabel, triggerLabel,
 } from '../js/logic/body.js';
 
@@ -224,4 +224,22 @@ test('recentCounts counts the last week by kind', () => {
   assert.equal(r.calm, 1);
   assert.equal(r.lastOverloadTs, NOW - DAY);
   assert.equal(recentCounts([], NOW).lastOverloadTs, null);
+});
+
+test('cleanStates drops broken logs and fills missing lists so views never crash', () => {
+  const out = cleanStates([
+    null,
+    { ts: 'x', kind: 'calm' },
+    { ts: 5, kind: 'other' },
+    { id: 7, ts: 10, kind: 'overload' },
+    { id: 'a', ts: 20, kind: 'calm', regions: ['chest', 3, ''], breathing: '', thoughts: 4, intensity: 11 },
+  ]);
+  assert.equal(out.length, 2);
+  assert.deepEqual(out[0], { id: '7', ts: 10, kind: 'overload', regions: [], sensations: [], emotions: [], triggers: [], breathing: null, thoughts: '', intensity: null });
+  assert.deepEqual(out[1].regions, ['chest']);
+  assert.equal(out[1].thoughts, '');
+  assert.equal(out[1].intensity, null);
+  assert.deepEqual(cleanStates(undefined), []);
+  const sample = sampleBody(Date.UTC(2026, 9, 4, 12)).states;
+  assert.deepEqual(cleanStates(sample), sample);
 });

@@ -134,10 +134,13 @@ function rng(seed) {
 export function sampleKid(now) {
   const rand = rng(23);
   const at = (daysAgo, hours) => {
+    // Set the local clock time directly, so a daylight-saving change day
+    // still puts breakfast at 8am rather than 9am.
     const d = new Date(now);
     d.setHours(0, 0, 0, 0);
     d.setDate(d.getDate() - daysAgo);
-    return d.getTime() + Math.round(hours * HOUR);
+    d.setHours(0, Math.round(hours * 60), 0, 0);
+    return d.getTime();
   };
   const jitter = (maxMin) => Math.floor(rand() * maxMin) * MIN;
 

@@ -32,6 +32,7 @@
 .med-hero { display: grid; gap: 10px; }
 .med-hero-top { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
 .med-edit { min-height: 44px; padding-inline: 4px; }
+.med-remind-on .text-btn, .med-due .text-btn { min-height: 44px; }
 .med-taken { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
 .med-taken-k { font: 500 var(--step-2)/1 var(--display); color: var(--ink-2); }
 .med-taken-v { font: 700 clamp(2.6rem, 12vw, 3.25rem)/0.95 var(--display); letter-spacing: -0.03em; }
@@ -82,6 +83,12 @@
   font: 600 0.6875rem/1 var(--mono); color: var(--ink); letter-spacing: 0.02em;
 }
 .med-ev { position: absolute; top: 37px; transform: translateX(-50%); color: var(--ink-2); line-height: 0; }
+.med-ev.plate { top: 53px; }
+.med-ev .med-ev-n {
+  position: absolute; left: calc(100% + 2px); top: 50%; transform: translateY(-50%);
+  font: 600 0.625rem/1 var(--mono); color: var(--ink-2); white-space: nowrap;
+}
+.med-track.has-ev .med-track-inner { height: 70px; }
 .med-track-axis {
   display: flex; justify-content: space-between; gap: 8px;
   font: 500 0.6875rem/1.2 var(--mono); color: var(--muted); font-variant-numeric: tabular-nums;
@@ -124,6 +131,7 @@
 
 /* ---------- day chart ---------- */
 .med-chart-sec { gap: 12px; }
+.med-chart-sec .section-head { flex-wrap: wrap; row-gap: 2px; }
 .med-chart { position: relative; margin-inline: -4px; touch-action: pan-y; }
 .med-svg { display: block; width: 100%; height: auto; overflow: visible; cursor: crosshair; -webkit-user-select: none; user-select: none; }
 .med-svg:focus-visible { outline: 2px solid var(--trend); outline-offset: 4px; border-radius: 8px; }
@@ -144,26 +152,28 @@
 .med-mark.anx { fill: var(--med-anx); }
 .med-mark.hi { stroke-width: 2.5; }
 .med-key-svg .med-mark { stroke: var(--surface); stroke-width: 1.5; }
-.med-end-label { font: 600 11px var(--body); fill: var(--ink-2); }
+.med-end-label {
+  font: 600 11px var(--body); fill: var(--ink-2);
+  /* A halo in the page colour so gridlines and the "now" line pass behind the text. */
+  paint-order: stroke; stroke: var(--bg); stroke-width: 3px; stroke-linejoin: round;
+}
 .med-leader { fill: none; stroke: var(--muted); stroke-width: 1; }
 .med-hair { stroke: var(--ink-2); stroke-width: 1; }
 .med-ev-mark { color: var(--ink-2); }
+.med-svg .med-ev-count { font: 600 9px var(--mono); fill: var(--ink-2); }
 .med-chart-hint { margin-top: -4px; }
 .med-table-toggle { justify-self: start; min-height: 44px; }
 
 .med-tip {
   position: absolute; z-index: 2; pointer-events: none;
-  min-width: 9.5rem; max-width: 13.5rem; padding: 10px 12px; border-radius: 12px;
+  min-width: 9rem; max-width: 12rem; padding: 9px 11px; border-radius: 12px;
   display: grid; gap: 3px; font-size: var(--step--1);
   background: var(--surface); border: 1px solid var(--rule); box-shadow: var(--shadow);
 }
 .med-tip-when { font: 500 0.75rem/1.3 var(--mono); color: var(--muted); margin-bottom: 2px; }
-.med-tip-row { display: flex; align-items: center; gap: 8px; color: var(--ink-2); }
-.med-tip-row strong { font: 700 1.0625rem/1.15 var(--display); color: var(--ink); min-width: 0.75em; font-variant-numeric: tabular-nums; }
-.med-tip-key { width: 14px; height: 2px; border-radius: 1px; flex: none; }
-.med-tip-key.focus { background: var(--med-focus); }
-.med-tip-key.mood { background: var(--med-mood); }
-.med-tip-key.anx { background: var(--med-anx); }
+.med-tip-row { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; align-items: center; gap: 8px; color: var(--ink-2); }
+.med-tip-row strong { font: 700 1.0625rem/1.2 var(--display); color: var(--ink); font-variant-numeric: tabular-nums; text-align: right; }
+.med-tip .med-key-svg .med-mark { stroke: var(--surface); }
 .med-tip-extra { color: var(--ink-2); }
 .med-tip-note { color: var(--ink); font-style: italic; overflow-wrap: anywhere; }
 
@@ -264,6 +274,14 @@
 .med-caf-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .med-caf { display: flex; align-items: center; gap: 10px; min-height: 56px; }
 .med-caf-ico { display: inline-flex; color: var(--ink-2); }
+.med-ico-cut { fill: var(--surface); }
+.med-caf-list { margin-top: -6px; }
+.med-caf-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; gap: 10px; min-height: 48px; }
+.med-caf-what { font-weight: 600; }
+.med-caf-when { font: 500 var(--step--1)/1 var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+.med-caf-x { min-height: 44px; padding-inline: 6px; color: var(--ink-2); }
+.med-caf-line { display: flex; align-items: baseline; gap: 8px; color: var(--ink-2); font-size: var(--step--1); }
+.med-caf-line .med-caf-ico { align-self: center; }
 
 /* ---------- day view ---------- */
 .med-day-head { display: grid; gap: 6px; }

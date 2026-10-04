@@ -9,7 +9,7 @@
 // slot when it lands within half an interval either side of it, so checking in
 // a little early or late still fills the slot.
 
-import { HOUR, DAY, average, sortByTs } from '../logic.js';
+import { HOUR, average, sortByTs } from '../logic.js';
 
 const MIN = 60000;
 export const CHART_HOURS = 14; // x axis of the day chart: 0–14h after the dose
@@ -164,6 +164,43 @@ export function caffeineFor(dose, caffeine) {
   if (!dose) return [];
   const key = localKey(dose.ts);
   return sortByTs((caffeine || []).filter((c) => c && num(c.ts) != null && localKey(c.ts) === key));
+}
+
+// Caffeine grouped for display: drinks of the same kind logged in the same
+// minute become one entry with a count. [{ ts, what, n }] in time order.
+export function caffeineGroups(items) {
+  const out = [];
+  for (const c of sortByTs((items || []).filter((x) => x && num(x.ts) != null))) {
+    const what = c.what || 'caffeine';
+    const prev = out[out.length - 1];
+    if (prev && prev.what === what && Math.floor(prev.ts / MIN) === Math.floor(c.ts / MIN)) prev.n += 1;
+    else out.push({ ts: c.ts, what, n: 1 });
+  }
+  return out;
+}
+
+// Caffeine and food marks for a chart or the timeline: one lane per kind, each
+// mark at its real time. Marks that would overlap (closer than `gap`, in the
+// units `pos` returns) merge into the first one with a count; a merged mark keeps
+// a wider berth (`countGap`) so its count has room.
+// events: [{ kind: 'cup'|'plate', h, label }] -> [{ kind, h, p, n, labels }]
+export function groupEvents(events, pos = (x) => x, gap = 0, countGap = gap * 1.8) {
+  const out = [];
+  for (const kind of ['cup', 'plate']) {
+    let g = null;
+    const list = (events || []).filter((e) => e && e.kind === kind && num(e.h) != null).sort((a, b) => a.h - b.h);
+    for (const ev of list) {
+      const p = pos(ev.h);
+      if (g && p - g.p < (g.n > 1 ? countGap : gap)) {
+        g.n += 1;
+        g.labels.push(ev.label);
+      } else {
+        g = { kind, h: ev.h, p, n: 1, labels: [ev.label] };
+        out.push(g);
+      }
+    }
+  }
+  return out;
 }
 
 const vals = (pts, key) => pts.map((p) => p[key]).filter((v) => v != null);
@@ -352,7 +389,9 @@ function foodLine(d) {
 // Plain text to paste into an email or show at an appointment.
 export function summaryText(doses, checks, caffeine, settings, now, { days = 14 } = {}) {
   const s = cleanSettings(settings);
-  const since = localStart(now) - (days - 1) * DAY;
+  const sinceDay = new Date(localStart(now));
+  sinceDay.setDate(sinceDay.getDate() - (days - 1)); // calendar days, so a daylight-saving change doesn't shift the window
+  const since = sinceDay.getTime();
   const list = sortByTs((doses || []).filter((d) => d && num(d.ts) != null && d.ts >= since && d.ts <= now));
   const out = [];
   out.push(`Medication log: ${s.name}${s.mg ? ` ${s.mg}mg` : ''}`);
@@ -438,7 +477,8 @@ export function sampleMeds(now) {
   const rand = rng(53);
   const today = localStart(now);
   const pastNine = now >= new Date(today).setHours(9, 0, 0, 0);
-  // [days ago, dose h, dose m, sleep, food, amount, protein, caffeine drinks, dose note]
+  // [days ago, dose h, dose m, sleep, food, amount, protein, caffeine drinks, dose note, nudge]
+  // nudge shifts a day's focus and anxiety a little so each example day has its own shape.
   const plan = [
     [6, 7, 50, 7, '', 'none', false, ['coffee', 'coffee', 'coffee'], ''],
     [5, 7, 25, 7.5, 'Eggs on toast', 'normal', true, ['coffee'], ''],
@@ -446,7 +486,7 @@ export function sampleMeds(now) {
     [3, 7, 40, 7.5, 'Toast and jam', 'small', false, ['coffee', 'tea'], ''],
     [2, 8, 35, 7, 'Greek yoghurt and a banana', 'normal', true, ['coffee', 'tea'], ''],
     [1, 7, 5, 6.5, '', 'none', false, ['coffee', 'coffee', 'energy drink', 'cola'], 'Rushed out the door. Forgot breakfast.'],
-    [0, 7, 40, 6, '', 'none', false, ['coffee', 'coffee'], 'Not hungry yet.'],
+    [0, 7, 40, 6, '', 'none', false, ['coffee', 'coffee'], 'Not hungry yet.', { focus: 0.75, anxiety: 0.45 }],
   ];
   const notes = {
     6: { 5: 'Third coffee. A bit buzzy.' },
@@ -464,7 +504,7 @@ export function sampleMeds(now) {
   const doses = [];
   const checks = [];
   const caffeine = [];
-  for (const [daysAgo, hh, mm, sleep, food, amount, protein, cups, doseNote] of plan) {
+  for (const [daysAgo, hh, mm, sleep, food, amount, protein, cups, doseNote, nudge = {}] of plan) {
     if (daysAgo === 0 && !pastNine) continue;
     const day = new Date(today);
     day.setDate(day.getDate() - daysAgo);
@@ -502,9 +542,9 @@ export function sampleMeds(now) {
         id: `ex-chk${daysAgo}-${k}`,
         ts: cts,
         doseId: id,
-        focus: score(1.9 + amp * on),
+        focus: score(1.9 + (amp + (nudge.focus || 0)) * on),
         mood: score(3 + 0.6 * on - 0.9 * crash + (sleep - 7) * 0.35 - (none ? 0.3 : 0)),
-        anxiety: score(1.3 + 0.55 * on + 0.35 * Math.max(0, cupsBy - 1) + (none ? 0.55 : 0) + (sleep < 6.6 ? 0.3 : 0)),
+        anxiety: score(1.3 + (0.55 + (nudge.anxiety || 0)) * on + 0.35 * Math.max(0, cupsBy - 1) + (none ? 0.55 : 0) + (sleep < 6.6 ? 0.3 : 0)),
         appetite: score(3.4 - 2.3 * on + (h > fade ? 0.6 : 0)),
         energy: score(2.1 + 1.7 * on - 0.8 * crash + (sleep - 7) * 0.4),
         ate,

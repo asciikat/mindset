@@ -98,6 +98,8 @@ function pickRow(name, options, value, { cols = options.length, onChange = null 
   const row = h('div', { class: `kid-pick cols-${cols}`, role: 'radiogroup', 'aria-labelledby': `${name}-l` });
   const draw = () => row.replaceChildren(...options.map(([v, label, sub]) => h('button', {
     class: 'choice', type: 'button', role: 'radio', 'aria-checked': String(current === v),
+    // One tab stop per group, like native radios: the checked one, or the first.
+    tabindex: (current == null ? v === options[0][0] : current === v) ? '0' : '-1',
     onclick: () => { current = v; draw(); row.querySelector('[aria-checked="true"]')?.focus(); onChange?.(v); },
   }, label, sub ? h('span', { text: sub }) : null)));
   draw();
@@ -448,7 +450,7 @@ function ideasSection(night) {
     ranked.length
       ? h('ul', { class: 'list kid-ideas' }, ranked.map((a) => ideaRow(a, byId.get(a.id))))
       : h('p', { class: 'empty', text: 'No ideas in the list yet. Add a few on a calm day.' }),
-    h('button', { class: 'text-btn kid-more', type: 'button', onclick: () => go('kid-activities') }, `All ${kid().activities.length} activities`));
+    h('button', { class: 'text-btn kid-more', type: 'button', onclick: () => go('kid-activities') }, kid().activities.length ? `All ${kid().activities.length} activities` : 'Add an activity'));
 }
 
 // "We did this": did it work, and when?
@@ -492,7 +494,8 @@ function youtubeCard() {
 // ---------- links ----------
 function linksSection() {
   const prog = planProgress(kid().plan.main);
-  const rated = new Set(kid().ratings.map((r) => r.foodId)).size;
+  const ids = new Set(kid().foods.map((f) => f.id));
+  const rated = new Set(kid().ratings.map((r) => r.foodId).filter((id) => ids.has(id))).size;
   const tile = (route, title, sub) => h('button', { class: 'kid-tile', type: 'button', onclick: () => go(route) }, h('strong', { text: title }), h('span', { text: sub }));
   return h('nav', { class: 'kid-tiles', 'aria-label': 'Plan and libraries' },
     tile('kid-plan', 'Visit plan', prog.total ? (prog.next ? `${prog.done} of ${prog.total} ticked. Next: ${prog.next.text}` : 'All ticked. Nice work.') : 'Make a plan on a calm day'),

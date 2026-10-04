@@ -6,7 +6,7 @@ import {
   REGIONS, SENSATIONS_HARD, SENSATIONS_CALM, EMOTIONS_HARD, EMOTIONS_CALM, BREATHING,
   THOUGHT_CHIPS_HARD, THOUGHT_CHIPS_CALM, TRIGGERS,
   regionLabel, breathingLabel, triggerLabel, starterBody, buildState, thoughtLines,
-  signature, ranked, earlySigns,
+  signature, ranked, earlySigns, cleanStates,
 } from '../logic/body.js';
 import {
   state, h, s, now, uid, commit, toast, go, render, setAccent, openSheet, closeSheet,
@@ -49,7 +49,9 @@ const SHAPES = {
     sh('rect', { x: 80, y: 29, width: 40, height: 17, rx: 8.5 }, ' body-soft'),
     s('path', { class: 'body-feature', d: 'M 85 38 Q 90 41.5 95 38 M 105 38 Q 110 41.5 115 38' }),
   ],
-  jaw: () => [sh('path', { d: 'M 78 48 C 79 60 88 67 100 67 C 112 67 121 60 122 48 C 114 54 107 56 100 56 C 93 56 86 54 78 48 Z' }, ' body-soft')],
+  // The lower face below the eye band, with a straight top edge, so a marked jaw reads as
+  // tension in the jaw and chin, not as a mouth or a smile.
+  jaw: () => [sh('path', { d: 'M 77.8 49 A 24 29 0 0 0 122.2 49 Z' }, ' body-soft')],
   arms: () => [sh('path', { d: ARM }), sh('path', { d: flip(ARM) })],
   shoulders: () => [sh('path', { d: 'M 88 86 L 112 86 C 128 88 146 92 156 100 C 163 106 164 116 160 127 C 140 129 120 129 100 129 C 80 129 60 129 40 127 C 36 116 37 106 44 100 C 54 92 72 88 88 86 Z' })],
   hands: () => [sh('path', { d: HAND }), sh('path', { d: flip(HAND) })],
@@ -413,7 +415,7 @@ function logsSection(states) {
 function bodyView() {
   setAccent('calm');
   applyPendingFocus();
-  const states = state.data.body.states;
+  const states = cleanStates(state.data.body.states);
   const over = signature(states, 'overload');
   const calm = signature(states, 'calm');
 

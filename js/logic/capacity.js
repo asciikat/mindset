@@ -272,8 +272,8 @@ const TITLES = {
   sliding: ['You’re heading toward overload', 'Two days sliding. Ease off now, before it tips.'],
   narrow: ['Your window is very narrow today', 'Protect yourself today. Small and gentle is the plan.'],
   slidingBefore: ['The last two days were sliding', 'Check in to see where today is.'],
-  debt: ['Running low on sleep', 'Sleep debt narrows the window. Tonight matters.'],
-  afterOverload: ['Still settling after an overload', 'Bodies take a day or two to come back.'],
+  debt: ['Running low on sleep', 'Short sleep tends to narrow the window. Tonight matters.'],
+  afterOverload: ['Still settling after an overload', 'Bodies can take a day or two to come back.'],
 };
 
 const ACTION_ORDER = {

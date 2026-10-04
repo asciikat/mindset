@@ -135,7 +135,7 @@ function openOverload(startAt = 'arrive') {
     const cue = h('p', { class: 'body-cue', 'aria-live': 'polite', text: 'Two breaths in through your nose. One long breath out.' });
     const dots = h('span', { class: 'body-round-dots', 'aria-hidden': 'true' });
     const count = h('span', { class: 'body-round-n' });
-    const btn = h('button', { class: 'btn block body-big', type: 'button', 'data-step-focus': '', 'aria-pressed': 'false' }, 'Start');
+    const btn = h('button', { class: 'btn block body-big', type: 'button', 'data-step-focus': '' }, 'Start');
 
     const goal = () => Math.max(ROUND_GOAL, Math.ceil((rounds + (running ? 1 : 0)) / ROUND_GOAL) * ROUND_GOAL);
     const drawRounds = () => {
@@ -174,7 +174,6 @@ function openOverload(startAt = 'arrive') {
       word.textContent = rm ? 'Ready' : '';
       secs.textContent = '';
       btn.textContent = rounds ? 'Keep going' : 'Start';
-      btn.setAttribute('aria-pressed', 'false');
       if (msg) cue.textContent = msg;
       drawRounds();
     };
@@ -195,7 +194,6 @@ function openOverload(startAt = 'arrive') {
     const begin = () => {
       running = true;
       btn.textContent = 'Pause';
-      btn.setAttribute('aria-pressed', 'true');
       drawRounds();
       setPhase(0);
       if (rm) tick = setInterval(showSecs, 250);
@@ -216,7 +214,7 @@ function openOverload(startAt = 'arrive') {
       btn,
       h('p', { class: 'fine body-why', text: rm
         ? 'Follow the words and the count. Two breaths in, one long breath out.'
-        : 'This is a physiological sigh. The long breath out is the part that helps your body slow down (Balban and colleagues, Cell Reports Medicine, 2023).' }),
+        : 'This is cyclic sighing. In one study, five minutes a day of it lifted mood and slowed breathing (Balban and colleagues, Cell Reports Medicine, 2023). The long breath out seems to be the part that helps.' }),
     ];
   }
 

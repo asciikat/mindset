@@ -319,3 +319,9 @@ test('togetherToday reads signs of a day together', () => {
   assert.equal(togetherToday({ tries: [T('a', 'yes', 'pickup', at(2026, 9, 4, 9))] }, NOW), true);
   assert.equal(togetherToday({ ratings: [R('x', 3, at(2026, 9, 3, 18))] }, NOW), false);
 });
+
+test('sampleKid keeps local clock times on a daylight-saving change day', () => {
+  // 4 Oct 2026 is the spring-forward day in Sydney; run with TZ=Australia/Sydney to exercise it.
+  const a = sampleKid(at(2026, 9, 4, 20, 0));
+  for (const n of a.nights) assert.equal(new Date(n.ts).getHours(), 7, new Date(n.ts).toString());
+});
