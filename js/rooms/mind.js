@@ -23,7 +23,8 @@ export function supportBanner() {
   return h('div', { class: 'banner support', role: 'note' },
     h('strong', { text: 'Your last few check-ins have been rough.' }),
     h('p', { text: 'You don’t have to carry this alone. Talking to someone you trust helps, and so can a trained listener.' }),
-    h('p', {}, 'In the US, call or text ', h('strong', { text: '988' }), '. Elsewhere, find a free line at ',
+    h('p', {}, 'In Australia, call Lifeline on ', h('strong', { class: 'selectable', text: '13 11 14' }), ' or text ', h('strong', { class: 'selectable', text: '0477 13 11 14' }),
+      '. In the US, call or text ', h('strong', { class: 'selectable', text: '988' }), '. Elsewhere, find a free line at ',
       h('a', { href: 'https://findahelpline.com', target: '_blank', rel: 'noopener' }, 'findahelpline.com'), '.'));
 }
 
@@ -285,7 +286,7 @@ function insightsView() {
       history.length ? h('ul', { class: 'list' }, shown.map((c) => entryRow(c))) : h('p', { class: 'empty', text: 'None yet.' }),
       history.length > shown.length ? h('button', { class: 'btn ghost', type: 'button', onclick: () => { state.ui.mindShowAll = true; render(); } }, `Show ${history.length - shown.length} more`) : null),
     h('p', {}, h('button', { class: 'text-btn', type: 'button', onclick: () => go('settings') }, 'Backup, import and settings')),
-    h('p', { class: 'fine' }, 'Mindset is a reflection tool, not therapy. If things feel heavy for a while, talk to someone. In the US, call or text 988. Elsewhere, see ',
+    h('p', { class: 'fine' }, 'Mindset is a reflection tool, not therapy. If things feel heavy for a while, talk to someone. In Australia, call Lifeline on 13 11 14. In the US, call or text 988. Elsewhere, see ',
       h('a', { href: 'https://findahelpline.com', target: '_blank', rel: 'noopener' }, 'findahelpline.com'), '.'),
   ];
 }
