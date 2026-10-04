@@ -1,5 +1,4 @@
-// Example data shown on first open so the app isn't an empty screen.
-// It is flagged `demo: true` and cleared the moment you log your first real check-in.
+// Example mood check-ins and worries shown on first open (see store.sampleData).
 
 import { DAY, HOUR } from './logic.js';
 
@@ -13,7 +12,7 @@ function rng(seed) {
   };
 }
 
-export function sampleData(now) {
+export function sampleMind(now) {
   const rand = rng(7);
   const today = new Date(now);
   today.setHours(0, 0, 0, 0);
@@ -63,5 +62,5 @@ export function sampleData(now) {
       });
     }
   }
-  return { version: 1, demo: true, checkins, worries };
+  return { checkins, worries };
 }
